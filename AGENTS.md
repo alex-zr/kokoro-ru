@@ -32,6 +32,9 @@ python main.py input/example.md
 # другой голос / только wav
 python main.py input/example.md --voice masha
 python main.py input/example.md --no-mp3
+
+# пакетно: все .md из папки, результаты рядом с исходниками
+python main.py input --batch
 ```
 
 На macOS для синтеза нужны `brew install espeak-ng ffmpeg` (`ffmpeg` нужен для
@@ -74,6 +77,9 @@ model/                        # скачанный репозиторий мод
   Не хардкодьте голоса/частоту/лимиты в других модулях.
 - Пути считаются от корня проекта (`ROOT` в `main.py`,
   `MODEL_DIR` в `synthesizer.py`), а не от текущей директории.
+- В пакетном режиме (`--batch`) результаты сохраняются рядом с исходными
+  `.md` (через `audio_path_for`), `-o` запрещён, а модель загружается один раз
+  на всю пачку. Ошибка в одном файле не должна прерывать остальные.
 - Соблюдайте `from __future__ import annotations` и type hints, как в
   остальных файлах.
 
