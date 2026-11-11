@@ -1,7 +1,7 @@
 """Озвучка Markdown-файла моделью kokoro-ru.
 
 Примеры:
-    python main.py                                  # input/example.md -> output/example.mp3
+    python main.py                                  # input/example.md -> input/example.mp3
     python main.py input/notes.md --voice masha
     python main.py input/notes.md --clean-only      # только очистка, без модели
     python main.py input --batch                    # все .md из input/ -> mp3 рядом с ними
@@ -30,7 +30,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=str(ROOT / "input" / "example.md"),
         help="путь к .md файлу или папке (вместе с --batch)",
     )
-    parser.add_argument("-o", "--output", help="куда сохранить .wav (по умолчанию output/<имя>.wav)")
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="куда сохранить .wav (по умолчанию рядом с исходником, с тем же именем)",
+    )
     parser.add_argument(
         "-b",
         "--batch",
@@ -62,12 +66,11 @@ def collect_markdown_files(directory: Path) -> list[Path]:
 
 
 def audio_path_for(source: Path, args: argparse.Namespace) -> Path:
-    if args.batch:
-        # В пакетном режиме результаты лежат рядом с исходным .md.
-        return source.with_suffix(".wav")
-    if args.output:
+    """Куда писать wav: -o в одиночном режиме или рядом с исходником."""
+    if args.output and not args.batch:
         return Path(args.output)
-    return ROOT / "output" / f"{source.stem}.wav"
+    # Имя как у входа, расширение соответствует формату (wav; затем mp3 при конвертации).
+    return source.with_suffix(".wav")
 
 
 def process_file(
@@ -120,6 +123,9 @@ def process_file(
         print("  " + ", ".join(sorted(unknown)))
 
     save_mp3_or_keep_wav(wav_path, args, duration)
+    # Текст нужен был только для проверки/отладки; после успешной озвучки убираем его.
+    txt_path.unlink(missing_ok=True)
+    print(f"Промежуточный текст удалён: {txt_path}")
     return 0
 
 

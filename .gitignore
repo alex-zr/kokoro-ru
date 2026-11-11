@@ -5,3 +5,7 @@ __pycache__/
 output/*
 !output/.gitkeep
 model/
+# по умолчанию аудио и .txt кладутся рядом с исходником
+input/*.mp3
+input/*.wav
+input/*.txt

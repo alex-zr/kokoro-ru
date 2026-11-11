@@ -30,11 +30,15 @@ class AudioPathTest(unittest.TestCase):
         source = Path("/tmp/notes/example.md")
         self.assertEqual(audio_path_for(source, args), Path("/tmp/notes/example.wav"))
 
-    def test_single_file_uses_output_by_default(self):
+    def test_single_file_saves_next_to_source_by_default(self):
         args = argparse.Namespace(batch=False, output=None)
         path = audio_path_for(Path("/tmp/notes/example.md"), args)
-        self.assertEqual(path.name, "example.wav")
-        self.assertEqual(path.parent.name, "output")
+        self.assertEqual(path, Path("/tmp/notes/example.wav"))
+
+    def test_single_markdown_gets_audio_extension(self):
+        args = argparse.Namespace(batch=False, output=None)
+        path = audio_path_for(Path("/tmp/notes/example.markdown"), args)
+        self.assertEqual(path, Path("/tmp/notes/example.wav"))
 
     def test_single_file_respects_output(self):
         args = argparse.Namespace(batch=False, output="/tmp/custom.wav")
