@@ -2,7 +2,7 @@
 
 Небольшой проект для озвучки Markdown-файлов русской моделью [kokoro-ru](https://huggingface.co/zaakirio/kokoro-ru) (неофициальный русский порт Kokoro-82M, голоса `sveta`, `masha`, `dima`).
 
-Что делает: берёт `.md`, убирает разметку (ссылки, код, таблицы, заголовки), режет на предложения, озвучивает и сохраняет `.wav` и `.mp3` (по умолчанию голосом `dima`).
+Что делает: берёт `.md`, убирает разметку (ссылки, код, таблицы, заголовки), режет на предложения, озвучивает и сохраняет `.mp3` (по умолчанию голосом `dima`; с `--no-mp3` — `.wav`).
 
 ## Структура
 
@@ -62,10 +62,10 @@ pip install -r requirements.txt
 ## Использование
 
 ```bash
-python main.py                                   # input/example.md -> output/example.wav + .mp3 (голос dima)
+python main.py                                   # input/example.md -> output/example.mp3 (голос dima)
 python main.py input/notes.md --voice masha      # другой голос
 python main.py input/notes.md --speed 0.95       # медленнее
-python main.py input/notes.md --no-mp3           # только wav, без mp3
+python main.py input/notes.md --no-mp3           # только wav, mp3 не создаётся
 python main.py input/notes.md --clean-only       # только очистка, модель не нужна
 ```
 
@@ -78,7 +78,7 @@ python main.py input/notes.md --clean-only       # только очистка, 
 | `--voice` | `sveta`, `masha`, `dima` (по умолчанию) |
 | `--speed` | скорость, 1.0 = обычная |
 | `--device` | `cpu` (по умолчанию) или `mps` (на Mac, не проверялся) |
-| `--no-mp3` | не сохранять mp3 (по умолчанию mp3 сохраняется) |
+| `--no-mp3` | не создавать mp3 и оставить wav (по умолчанию mp3 сохраняется, а промежуточный wav удаляется) |
 | `--clean-only` | только очистка текста |
 | `--no-numbers` | не заменять числа словами |
 | `--revision` | коммит репозитория модели |

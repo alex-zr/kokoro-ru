@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
 
     save_wav(wav_path, audio)
     elapsed = time.perf_counter() - started
-    print(f"Готово: {wav_path} ({audio.size / SAMPLE_RATE:.0f} с аудио за {elapsed:.0f} с)")
+    duration = f"{audio.size / SAMPLE_RATE:.0f} с аудио за {elapsed:.0f} с"
 
     if unknown:
         print("Слова, которых нет в словаре (могут читаться неверно):")
@@ -94,12 +94,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.mp3:
         if shutil.which("ffmpeg") is None:
-            print("ffmpeg не найден: brew install ffmpeg")
+            print("ffmpeg не найден: brew install ffmpeg — оставляю только wav")
+            print(f"Готово: {wav_path} ({duration})")
         else:
             mp3_path = wav_path.with_suffix(".mp3")
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), str(mp3_path)], check=True)
-            print(f"mp3: {mp3_path}")
+            subprocess.run(
+                ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), str(mp3_path)],
+                check=True,
+            )
+            # mp3 уже готов, промежуточный wav больше не нужен.
+            wav_path.unlink(missing_ok=True)
+            print(f"Готово: {mp3_path} ({duration}, wav удалён)")
+    else:
+        print(f"Готово: {wav_path} ({duration})")
     return 0
+
 
 
 if __name__ == "__main__":
