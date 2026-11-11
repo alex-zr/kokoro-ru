@@ -1,0 +1,8 @@
+# Рекомендуется Python 3.10–3.12 (пакет kokoro может не поддерживать более новые версии)
+kokoro
+torch
+soundfile
+numpy
+huggingface_hub
+ruaccent      # ударения для ru_g2p
+num2words     # необязательно: числа -> слова
