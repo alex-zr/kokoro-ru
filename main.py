@@ -25,10 +25,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "input", nargs="?", default=str(ROOT / "input" / "example.md"), help="путь к .md файлу"
     )
     parser.add_argument("-o", "--output", help="куда сохранить .wav (по умолчанию output/<имя>.wav)")
-    parser.add_argument("--voice", choices=list(VOICES), default="masha")
+    parser.add_argument("--voice", choices=list(VOICES), default="dima")
     parser.add_argument("--speed", type=float, default=1.0, help="скорость речи, 1.0 = обычная")
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps"])
-    parser.add_argument("--mp3", action="store_true", help="дополнительно сохранить mp3 (нужен ffmpeg)")
+    parser.add_argument(
+        "--no-mp3", dest="mp3", action="store_false", help="не сохранять mp3 (по умолчанию сохраняется)"
+    )
+    parser.add_argument(
+        "--mp3", dest="mp3", action="store_true", help=argparse.SUPPRESS
+    )  # оставлено для совместимости: mp3 теперь по умолчанию
     parser.add_argument("--clean-only", action="store_true", help="только очистить текст и сохранить .txt")
     parser.add_argument("--no-numbers", action="store_true", help="не заменять числа словами")
     parser.add_argument("--revision", help="коммит репозитория модели (для воспроизводимости)")

@@ -22,7 +22,7 @@ VOICES: dict[str, str] = {
 
 @dataclass
 class Settings:
-    voice: str = "masha"
+    voice: str = "dima"
     speed: float = 1.0
     device: str = "cpu"  # "cpu" или "mps" (на Mac; mps не проверялся)
     pause_sentence: float = 0.25  # секунды тишины после предложения

@@ -22,6 +22,9 @@ ProgressCallback = Callable[[int, int], None]
 # не находит рядом с собой папку espeak-data.
 MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
 
+# Файл внутри MODEL_DIR, где запоминается коммит скачанной модели.
+_REVISION_MARKER = ".downloaded_revision"
+
 
 class RussianSynthesizer:
     def __init__(self, settings: Settings | None = None) -> None:
@@ -33,6 +36,29 @@ class RussianSynthesizer:
         self._load()
 
     # ------------------------------------------------------------------ загрузка
+    def _required_files(self, repo_dir: Path) -> list[Path]:
+        """Файлы, без которых синтез выбранным голосом не заработает."""
+        voice = self.settings.voice
+        return [
+            repo_dir / VOICES[voice],
+            repo_dir / "voices" / f"{voice}.pt",
+            repo_dir / "ru_g2p.py",
+            repo_dir / "config.json",
+            repo_dir / "espeak-data",
+        ]
+
+    def _model_ready(self, repo_dir: Path) -> bool:
+        """True, если модель уже скачана и её не нужно запрашивать у Hugging Face."""
+        if not all(path.exists() for path in self._required_files(repo_dir)):
+            return False
+
+        revision = self.settings.revision
+        if revision is None:
+            return True
+
+        marker = repo_dir / _REVISION_MARKER
+        return marker.is_file() and marker.read_text(encoding="utf-8").strip() == revision
+
     def _load(self) -> None:
         import torch
         from huggingface_hub import snapshot_download
@@ -41,33 +67,49 @@ class RussianSynthesizer:
         s = self.settings
         checkpoint = VOICES[s.voice]
         other_checkpoints = sorted(set(VOICES.values()) - {checkpoint})
+        repo_dir = MODEL_DIR
 
-        # Скачиваем репозиторий целиком, кроме ONNX и чужих чекпоинтов:
-        # там же лежат ru_g2p.py (русская фонетика и ударения через RUAccent)
-        # и espeak-data.
-        repo_dir = Path(
-            snapshot_download(
-                s.repo_id,
-                revision=s.revision,
-                local_dir=MODEL_DIR,
-                ignore_patterns=[
-                    "onnx/*",
-                    "voices/*.bin",
-                    "*.wav",
-                    "*.mp3",
-                    "*.png",
-                    "*.jpg",
-                    *other_checkpoints,
-                ],
+        if self._model_ready(repo_dir):
+            # Никаких обращений к сети: используем уже скачанные файлы.
+            print(f"Модель уже скачана: {repo_dir}")
+        else:
+            # Скачиваем репозиторий целиком, кроме ONNX и чужих чекпоинтов:
+            # там же лежат ru_g2p.py (русская фонетика и ударения через RUAccent)
+            # и espeak-data.
+            repo_dir = Path(
+                snapshot_download(
+                    s.repo_id,
+                    revision=s.revision,
+                    local_dir=MODEL_DIR,
+                    ignore_patterns=[
+                        "onnx/*",
+                        "voices/*.bin",
+                        "*.wav",
+                        "*.mp3",
+                        "*.png",
+                        "*.jpg",
+                        *other_checkpoints,
+                    ],
+                )
             )
-        )
+            if s.revision is not None:
+                (repo_dir / _REVISION_MARKER).write_text(s.revision, encoding="utf-8")
 
         # ВНИМАНИЕ: ru_g2p.py из репозитория модели выполняется как обычный код.
         sys.path.insert(0, str(repo_dir))
         ru_g2p = importlib.import_module("ru_g2p")
         self._g2p = ru_g2p.RuG2P()
 
-        self._model = KModel(s.repo_id, model=str(repo_dir / checkpoint)).to(s.device).eval()
+        # config передаём локальным путём, чтобы KModel не ходил за ним на HF Hub.
+        self._model = (
+            KModel(
+                s.repo_id,
+                config=str(repo_dir / "config.json"),
+                model=str(repo_dir / checkpoint),
+            )
+            .to(s.device)
+            .eval()
+        )
 
         pack = torch.load(
             repo_dir / "voices" / f"{s.voice}.pt", map_location="cpu", weights_only=False

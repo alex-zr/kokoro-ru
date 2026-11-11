@@ -25,13 +25,17 @@ python -m unittest discover -v
 # только очистка текста (модель не скачивается)
 python main.py input/example.md --clean-only
 
-# полный синтез
+# полный синтез: голос dima и mp3 по умолчанию
+python main.py input/example.md
+
+# другой голос / только wav
 python main.py input/example.md --voice masha
+python main.py input/example.md --no-mp3
 ```
 
-На macOS для синтеза нужны `brew install espeak-ng ffmpeg` (`ffmpeg` — только
-для `--mp3`). Python 3.10–3.12: пакет `kokoro` может не поддерживать более новые
-версии.
+На macOS для синтеза нужны `brew install espeak-ng ffmpeg` (`ffmpeg` нужен для
+mp3, который сохраняется по умолчанию). Python 3.10–3.12: пакет `kokoro` может
+не поддерживать более новые версии.
 
 ## Структура
 
@@ -95,6 +99,11 @@ python -m unittest discover -v
 - **Модель качается в `model/`, а не в кэш Hugging Face.** В кэше файлы —
   симлинки на `blobs/`, и `ru_g2p.py` не находит рядом `espeak-data`.
   Не меняйте `local_dir` на кэш.
+- **Повторные запуски не ходят в сеть.** `RussianSynthesizer._model_ready`
+  проверяет наличие чекпоинта, голосового пака, `ru_g2p.py`, `config.json` и
+  `espeak-data`; если всё есть, `snapshot_download` не вызывается. При
+  `--revision` дополнительно сверяется маркер `.downloaded_revision`.
+  Обновить модель можно, удалив `model/` или сменив `--revision`.
 - **`ru_g2p.py` из репозитория модели выполняется как обычный код** через
   `sys.path.insert` + `importlib`. Для воспроизводимости фиксируйте
   `--revision <коммит>`.

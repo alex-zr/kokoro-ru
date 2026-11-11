@@ -2,7 +2,7 @@
 
 Небольшой проект для озвучки Markdown-файлов русской моделью [kokoro-ru](https://huggingface.co/zaakirio/kokoro-ru) (неофициальный русский порт Kokoro-82M, голоса `sveta`, `masha`, `dima`).
 
-Что делает: берёт `.md`, убирает разметку (ссылки, код, таблицы, заголовки), режет на предложения, озвучивает и сохраняет `.wav` (и по желанию `.mp3`).
+Что делает: берёт `.md`, убирает разметку (ссылки, код, таблицы, заголовки), режет на предложения, озвучивает и сохраняет `.wav` и `.mp3` (по умолчанию голосом `dima`).
 
 ## Структура
 
@@ -25,7 +25,7 @@ kokoro-ru-tts/
 ```bash
 brew install espeak-ng ffmpeg
 ```
-`ffmpeg` нужен только для `--mp3`. `espeak-ng` часто требуется фонетике; если `ru_g2p` попросит другие зависимости, их список смотрите в README репозитория модели.
+`ffmpeg` нужен для mp3, который сохраняется по умолчанию (отключить можно `--no-mp3`). `espeak-ng` часто требуется фонетике; если `ru_g2p` попросит другие зависимости, их список смотрите в README репозитория модели.
 
 Python лучше взять 3.10–3.12: пакет `kokoro` может не поддерживать более новые версии.
 
@@ -36,7 +36,7 @@ Python лучше взять 3.10–3.12: пакет `kokoro` может не п
 3. Откройте терминал PyCharm и выполните `pip install -r requirements.txt`.
 4. **Run → Edit Configurations → + → Python**:
    - Script: `main.py`
-   - Parameters: `input/example.md --voice masha`
+   - Parameters: `input/example.md` (по умолчанию голос `dima` и mp3)
    - Working directory: корень проекта
 5. Запустите. При первом запуске модель скачается с Hugging Face (несколько сотен МБ, ONNX-файлы пропускаются).
 
@@ -62,20 +62,23 @@ pip install -r requirements.txt
 ## Использование
 
 ```bash
-python main.py                                   # input/example.md -> output/example.wav
-python main.py input/notes.md --voice dima       # другой голос
-python main.py input/notes.md --speed 0.95 --mp3 # медленнее + mp3
+python main.py                                   # input/example.md -> output/example.wav + .mp3 (голос dima)
+python main.py input/notes.md --voice masha      # другой голос
+python main.py input/notes.md --speed 0.95       # медленнее
+python main.py input/notes.md --no-mp3           # только wav, без mp3
 python main.py input/notes.md --clean-only       # только очистка, модель не нужна
 ```
 
 Рядом с аудио сохраняется очищенный текст (`output/<имя>.txt`): откройте его и убедитесь, что читаться будет именно то, что нужно.
 
+Модель скачивается только один раз в `model/`. При следующих запусках, если все нужные файлы уже на месте, проект вообще не обращается к Hugging Face — можно работать офлайн. Чтобы обновить модель, удалите `model/` или укажите новый `--revision`.
+
 | Параметр | Значение |
 |---|---|
-| `--voice` | `sveta`, `masha` (по умолчанию), `dima` |
+| `--voice` | `sveta`, `masha`, `dima` (по умолчанию) |
 | `--speed` | скорость, 1.0 = обычная |
 | `--device` | `cpu` (по умолчанию) или `mps` (на Mac, не проверялся) |
-| `--mp3` | дополнительно сохранить mp3 |
+| `--no-mp3` | не сохранять mp3 (по умолчанию mp3 сохраняется) |
 | `--clean-only` | только очистка текста |
 | `--no-numbers` | не заменять числа словами |
 | `--revision` | коммит репозитория модели |
