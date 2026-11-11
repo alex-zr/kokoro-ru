@@ -17,6 +17,11 @@ from .config import MAX_PHONEMES, SAMPLE_RATE, VOICES, Settings
 
 ProgressCallback = Callable[[int, int], None]
 
+# Модель скачивается в обычную папку проекта, а не в кэш Hugging Face:
+# в кэше файлы лежат как символические ссылки на blobs/, и ru_g2p.py
+# не находит рядом с собой папку espeak-data.
+MODEL_DIR = Path(__file__).resolve().parent.parent / "model"
+
 
 class RussianSynthesizer:
     def __init__(self, settings: Settings | None = None) -> None:
@@ -38,11 +43,13 @@ class RussianSynthesizer:
         other_checkpoints = sorted(set(VOICES.values()) - {checkpoint})
 
         # Скачиваем репозиторий целиком, кроме ONNX и чужих чекпоинтов:
-        # там же лежит ru_g2p.py (русская фонетика и ударения через RUAccent).
+        # там же лежат ru_g2p.py (русская фонетика и ударения через RUAccent)
+        # и espeak-data.
         repo_dir = Path(
             snapshot_download(
                 s.repo_id,
                 revision=s.revision,
+                local_dir=MODEL_DIR,
                 ignore_patterns=[
                     "onnx/*",
                     "voices/*.bin",

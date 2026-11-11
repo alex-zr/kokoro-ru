@@ -1,0 +1,122 @@
+# AGENTS.md
+
+Инструкции для AI-агентов и разработчиков, работающих с этим репозиторием.
+
+## Что это за проект
+
+CLI-утилита: берёт Markdown-файл, очищает разметку, режет текст на предложения
+и озвучивает русской моделью [kokoro-ru](https://huggingface.co/zaakirio/kokoro-ru)
+(порт Kokoro-82M, голоса `sveta`, `masha`, `dima`). Результат — `.wav`
+(опционально `.mp3`) и очищенный `.txt` рядом с аудио.
+
+Проект небольшой, без фреймворков и сборки. Весь код — обычный Python-пакет
+`kokoro_tts/` + точка входа `main.py`.
+
+## Быстрый старт
+
+```bash
+# окружение уже создано в .venv (Python 3.12)
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# тесты (модель и torch не нужны)
+python -m unittest discover -v
+
+# только очистка текста (модель не скачивается)
+python main.py input/example.md --clean-only
+
+# полный синтез
+python main.py input/example.md --voice masha
+```
+
+На macOS для синтеза нужны `brew install espeak-ng ffmpeg` (`ffmpeg` — только
+для `--mp3`). Python 3.10–3.12: пакет `kokoro` может не поддерживать более новые
+версии.
+
+## Структура
+
+```
+main.py                       # argparse + оркестрация: md -> txt -> wav/mp3
+kokoro_tts/
+  config.py                   # REPO_ID, SAMPLE_RATE, MAX_PHONEMES, VOICES, Settings
+  markdown_cleaner.py         # Markdown -> абзацы чистого текста
+  chunking.py                 # абзацы -> предложения -> половины длинных фраз
+  synthesizer.py              # загрузка kokoro-ru и синтез в numpy-массив
+tests/                        # unittest, без тяжёлых зависимостей
+input/example.md              # пример входа
+output/                       # результаты (в git не попадает)
+model/                        # скачанный репозиторий модели (в git не попадает)
+```
+
+Поток данных:
+
+```
+.md --clean_markdown--> текст --split_paragraphs/split_sentences--> предложения
+    --RuG2P--> IPA --KModel + voice pack--> float32 @ 24 кГц --save_wav--> .wav
+```
+
+## Правила изменения кода
+
+- **Тяжёлые импорты — только лениво.** `torch`, `kokoro`, `huggingface_hub`,
+  `soundfile` импортируются внутри функций (`synthesizer._load`, `save_wav`,
+  `main.main`), чтобы `--clean-only` и тесты работали без них. Не поднимайте их
+  на уровень модуля.
+- **`markdown_cleaner.py` и `chunking.py` должны оставаться без зависимостей**
+  (только стандартная библиотека). Это позволяет тестировать их без модели.
+- Комментарии, docstring'и и пользовательские сообщения — **на русском**,
+  в стиле существующего кода.
+- Настройки и константы — в `kokoro_tts/config.py` (`Settings` — dataclass).
+  Не хардкодьте голоса/частоту/лимиты в других модулях.
+- Пути считаются от корня проекта (`ROOT` в `main.py`,
+  `MODEL_DIR` в `synthesizer.py`), а не от текущей директории.
+- Соблюдайте `from __future__ import annotations` и type hints, как в
+  остальных файлах.
+
+## Тесты
+
+```bash
+python -m unittest discover -v
+```
+
+- Тесты **не должны** скачивать модель, требовать `torch`/`espeak-ng` или сеть.
+- Изменение поведения `clean_markdown`, `split_*`, `numbers_to_words`
+  сопровождайте тестом в `tests/test_markdown_cleaner.py` или
+  `tests/test_chunking.py`.
+- Тесты, зависящие от `num2words`, помечайте
+  `@unittest.skipUnless(importlib.util.find_spec("num2words"), ...)`.
+- Ожидаемый результат очистки — точное сравнение строк: следите за пробелами,
+  точками в конце абзацев (`_ensure_end`) и пустыми строками между абзацами.
+
+## Подводные камни
+
+- **Лимит ~500 фонем.** Голосовой пак индексируется длиной IPA-строки
+  (`self._pack[len(ipa) - 1]`), поэтому длинные фразы делятся через
+  `split_in_half`. Не увеличивайте `MAX_PHONEMES` без понимания ограничения.
+- **Модель качается в `model/`, а не в кэш Hugging Face.** В кэше файлы —
+  симлинки на `blobs/`, и `ru_g2p.py` не находит рядом `espeak-data`.
+  Не меняйте `local_dir` на кэш.
+- **`ru_g2p.py` из репозитория модели выполняется как обычный код** через
+  `sys.path.insert` + `importlib`. Для воспроизводимости фиксируйте
+  `--revision <коммит>`.
+- `sveta` и `masha` используют один чекпоинт (`kokoro-ru-v2-base.pth`),
+  `dima` — отдельный. Список — в `VOICES`.
+- Числа переводятся в слова без согласования падежей; даты вида `11.11.2026`
+  намеренно не трогаются. Это известное ограничение, а не баг.
+- Сокращения («т. е.») могут разрезать предложение при `split_sentences`.
+- `sveta`, по описанию автора модели, звучит темнее остальных.
+
+## Чего не делать
+
+- Не коммитить `.venv/`, `model/`, `output/*`, `__pycache__/` (см. `.gitignore`).
+- Не добавлять тяжёлые зависимости в `markdown_cleaner.py` / `chunking.py`.
+- Не запускать полный синтез в тестах и не требовать его для CI.
+- Не переписывать `README.md` под свои изменения без необходимости: он
+  описывает пользовательский сценарий и ограничения.
+
+## Чек-лист перед завершением задачи
+
+1. `python -m unittest discover -v` — зелёный.
+2. `python main.py input/example.md --clean-only` — создаёт
+   `output/example.txt` и не падает без модели.
+3. Новые константы — в `config.py`; новые тексты/сообщения — на русском.
+4. Тяжёлые импорты не подняты на уровень модулей.
