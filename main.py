@@ -1,10 +1,15 @@
 """Озвучка Markdown-файла моделью kokoro-ru.
 
+Аргумент один: путь к файлу или к папке. Если это файл, озвучивается он,
+если папка — все .md верхнего уровня. Результат всегда сохраняется в папке
+исходника, с тем же именем и расширением .mp3 (или .wav с --no-mp3).
+
 Примеры:
     python main.py                                  # input/example.md -> input/example.mp3
     python main.py input/notes.md --voice masha
     python main.py input/notes.md --clean-only      # только очистка, без модели
-    python main.py input --batch                    # все .md из input/ -> mp3 рядом с ними
+    python main.py input                            # все .md из input/ -> mp3 рядом с ними
+    python main.py ~/Documents/my notes.md          # пробелы в пути можно не экранировать
 """
 from __future__ import annotations
 
@@ -21,14 +26,22 @@ ROOT = Path(__file__).resolve().parent
 
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
 
+DEFAULT_INPUT = ROOT / "input" / "example.md"
+
+
+def input_path(parts: list[str] | None) -> Path:
+    """Путь из позиционных аргументов: можно не брать в кавычки, если есть пробелы."""
+    if not parts:
+        return DEFAULT_INPUT
+    return Path(" ".join(parts)).expanduser()
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Озвучка Markdown русским TTS (kokoro-ru)")
     parser.add_argument(
         "input",
-        nargs="?",
-        default=str(ROOT / "input" / "example.md"),
-        help="путь к .md файлу или папке (вместе с --batch)",
+        nargs="*",
+        help="путь к .md файлу или к папке с .md файлами (пробелы можно не экранировать)",
     )
     parser.add_argument(
         "-o",
@@ -39,7 +52,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-b",
         "--batch",
         action="store_true",
-        help="обработать все .md файлы из указанной папки, сохраняя результаты рядом с исходниками",
+        help="устаревший флаг: папка определяется автоматически по аргументу",
     )
     parser.add_argument("--voice", choices=list(VOICES), default="dima")
     parser.add_argument("--speed", type=float, default=1.0, help="скорость речи, 1.0 = обычная")
@@ -65,11 +78,30 @@ def collect_markdown_files(directory: Path) -> list[Path]:
     )
 
 
+def resolve_sources(source: Path, batch: bool = False) -> tuple[list[Path], str | None]:
+    """Файлы для обработки и текст ошибки (None, если всё в порядке).
+
+    Папка -> все Markdown-файлы верхнего уровня, файл -> он сам.
+    Флаг --batch оставлен для совместимости и требует именно папку.
+    """
+    if source.is_dir():
+        sources = collect_markdown_files(source)
+        if not sources:
+            return [], f"В папке нет Markdown-файлов: {source}"
+        return sources, None
+    if source.is_file():
+        if batch:
+            return [], f"--batch ожидает папку, а не файл: {source}"
+        return [source], None
+    if batch:
+        return [], f"Не найдена папка: {source}"
+    return [], f"Файл не найден: {source}"
+
+
 def audio_path_for(source: Path, args: argparse.Namespace) -> Path:
-    """Куда писать wav: -o в одиночном режиме или рядом с исходником."""
-    if args.output and not args.batch:
+    """Куда писать wav: -o или рядом с исходником (имя как у входа)."""
+    if args.output:
         return Path(args.output)
-    # Имя как у входа, расширение соответствует формату (wav; затем mp3 при конвертации).
     return source.with_suffix(".wav")
 
 
@@ -148,24 +180,18 @@ def save_mp3_or_keep_wav(wav_path: Path, args: argparse.Namespace, duration: str
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    source = Path(args.input)
+    source = input_path(args.input)
 
-    if args.batch:
-        if args.output:
-            print("-o/--output нельзя использовать вместе с --batch: результаты сохраняются рядом с исходниками.")
-            return 1
-        if not source.is_dir():
-            print(f"Не найдена папка: {source}")
-            return 1
-        sources = collect_markdown_files(source)
-        if not sources:
-            print(f"В папке нет Markdown-файлов: {source}")
-            return 1
-    else:
-        if not source.is_file():
-            print(f"Файл не найден: {source}")
-            return 1
-        sources = [source]
+    sources, error = resolve_sources(source, args.batch)
+    if error:
+        print(error)
+        return 1
+
+    # Папка -> пакетный режим: -o запрещён, прогресс печатается с именем файла.
+    args.batch = source.is_dir()
+    if args.batch and args.output:
+        print("-o/--output нельзя использовать для папки: результаты сохраняются рядом с исходниками.")
+        return 1
 
     synthesizer = None
     if not args.clean_only:
