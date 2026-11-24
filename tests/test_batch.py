@@ -7,7 +7,11 @@ from main import (
     DEFAULT_INPUT,
     audio_path_for,
     collect_markdown_files,
+    collect_narration_files,
+    find_narration_dirs,
     input_path,
+    narration_looks_like_path,
+    parse_args,
     resolve_sources,
 )
 
@@ -44,6 +48,84 @@ class CollectMarkdownFilesTest(unittest.TestCase):
             self.assertEqual(collect_markdown_files(Path(tmp)), [])
 
 
+def make_narration_tree(root: Path) -> None:
+    """Тестовое дерево: несколько вложенных narration и посторонние .md."""
+    for relative in (
+        "Book A/narration/chapter",
+        "Book B/NARRATION",
+        "Book B/other",
+        "plain",
+    ):
+        (root / relative).mkdir(parents=True)
+
+    for relative in (
+        "Book A/intro.md",
+        "Book A/narration/intro.md",
+        "Book A/narration/body.markdown",
+        "Book A/narration/notes.txt",
+        "Book A/narration/chapter/nested.md",
+        "Book B/NARRATION/part.md",
+        "Book B/other/skip.md",
+    ):
+        (root / relative).write_text("текст", encoding="utf-8")
+
+
+class NarrationFilesTest(unittest.TestCase):
+    def test_finds_nested_narration_dirs_case_insensitive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_narration_tree(root)
+
+            found = [path.relative_to(root).as_posix() for path in find_narration_dirs(root)]
+
+            self.assertEqual(found, ["Book A/narration", "Book B/NARRATION"])
+
+    def test_custom_narration_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "chapter" / "voiceover").mkdir(parents=True)
+
+            found = find_narration_dirs(root, "voiceover")
+
+            self.assertEqual(found, [root / "chapter" / "voiceover"])
+
+    def test_skips_hidden_and_service_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for relative in (".git/narration", ".venv/narration", "model/narration", "book/narration"):
+                (root / relative).mkdir(parents=True)
+
+            found = find_narration_dirs(root)
+
+            self.assertEqual(found, [root / "book" / "narration"])
+
+    def test_collects_only_top_level_markdown_from_narration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_narration_tree(root)
+
+            found = [path.relative_to(root).as_posix() for path in collect_narration_files(root)]
+
+            self.assertEqual(
+                found,
+                [
+                    "Book A/narration/body.markdown",
+                    "Book A/narration/intro.md",
+                    "Book B/NARRATION/part.md",
+                ],
+            )
+
+    def test_root_named_narration_is_included(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "narration"
+            root.mkdir()
+            (root / "voice.md").write_text("текст", encoding="utf-8")
+
+            found = collect_narration_files(root)
+
+            self.assertEqual(found, [root / "voice.md"])
+
+
 class ResolveSourcesTest(unittest.TestCase):
     def test_single_file_needs_no_batch_flag(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -75,6 +157,54 @@ class ResolveSourcesTest(unittest.TestCase):
             self.assertEqual(sources, [])
             self.assertIn("нет Markdown-файлов", error)
 
+    def test_narration_collects_files_from_nested_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            make_narration_tree(root)
+
+            sources, error = resolve_sources(root, narration="narration")
+
+            self.assertIsNone(error)
+            self.assertEqual(
+                [path.relative_to(root).as_posix() for path in sources],
+                [
+                    "Book A/narration/body.markdown",
+                    "Book A/narration/intro.md",
+                    "Book B/NARRATION/part.md",
+                ],
+            )
+
+    def test_narration_without_dirs_reports_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book").mkdir()
+
+            sources, error = resolve_sources(root, narration="narration")
+
+            self.assertEqual(sources, [])
+            self.assertIn("не найдены", error)
+
+    def test_narration_without_markdown_reports_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "book" / "narration").mkdir(parents=True)
+            (root / "book" / "narration" / "note.txt").write_text("текст", encoding="utf-8")
+
+            sources, error = resolve_sources(root, narration="narration")
+
+            self.assertEqual(sources, [])
+            self.assertIn("нет Markdown-файлов", error)
+
+    def test_narration_rejects_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "notes.md"
+            source.write_text("текст", encoding="utf-8")
+
+            sources, error = resolve_sources(source, narration="narration")
+
+            self.assertEqual(sources, [])
+            self.assertIn("ожидает папку", error)
+
     def test_missing_path_reports_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             sources, error = resolve_sources(Path(tmp) / "missing.md")
@@ -91,6 +221,28 @@ class ResolveSourcesTest(unittest.TestCase):
 
             self.assertEqual(sources, [])
             self.assertIn("ожидает папку", error)
+
+
+class NarrationArgTest(unittest.TestCase):
+    def test_flag_without_value_uses_default_name(self):
+        args = parse_args(["input", "--narration"])
+
+        self.assertEqual(args.narration, "narration")
+
+    def test_flag_accepts_custom_name(self):
+        args = parse_args(["input", "--narration", "voiceover"])
+
+        self.assertEqual(args.narration, "voiceover")
+
+    def test_flag_is_off_by_default(self):
+        args = parse_args(["input"])
+
+        self.assertIsNone(args.narration)
+
+    def test_path_after_flag_is_detected(self):
+        self.assertTrue(narration_looks_like_path("/tmp/Books"))
+        self.assertTrue(narration_looks_like_path("./Books"))
+        self.assertFalse(narration_looks_like_path("voiceover-name-that-does-not-exist"))
 
 
 class AudioPathTest(unittest.TestCase):

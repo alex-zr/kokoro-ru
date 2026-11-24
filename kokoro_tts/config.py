@@ -12,6 +12,15 @@ SAMPLE_RATE = 24000
 # поэтому фразы длиннее ~500 фонем нужно делить.
 MAX_PHONEMES = 500
 
+# Имя папки, содержимое которой озвучивается в режиме --narration.
+NARRATION_DIR_NAME = "narration"
+
+# Служебные папки, в которые не заходим при поиске вложенных narration.
+# Скрытые папки (начинающиеся с точки) пропускаются отдельно.
+SKIP_DIRS: frozenset[str] = frozenset(
+    {"model", "output", "node_modules", "venv", "env", "__pycache__", "site-packages"}
+)
+
 # голос -> файл чекпоинта (sveta и masha делят один чекпоинт)
 VOICES: dict[str, str] = {
     "sveta": "kokoro-ru-v2-base.pth",
