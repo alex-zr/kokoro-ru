@@ -30,8 +30,16 @@ from kokoro_tts.markdown_cleaner import clean_markdown
 ROOT = Path(__file__).resolve().parent
 
 MARKDOWN_SUFFIXES = {".md", ".markdown"}
+PROGRESS_WIDTH = 20
 
 DEFAULT_INPUT = ROOT / "input" / "example.md"
+
+
+def progress_bar(done: int, total: int, width: int = PROGRESS_WIDTH) -> str:
+    """Текстовый прогресс-бар без внешних зависимостей."""
+    fraction = min(done / total, 1.0) if total > 0 else 0.0
+    filled = round(width * fraction)
+    return f"{'█' * filled}{'░' * (width - filled)} {done}/{total}"
 
 
 def input_path(parts: list[str] | None) -> Path:
@@ -183,6 +191,8 @@ def process_file(
     source: Path,
     args: argparse.Namespace,
     synthesizer: object | None,
+    file_total: int = 1,
+    completed_files: int = 0,
 ) -> int:
     """Озвучивает один файл. Возвращает 0 при успехе, 1 при ошибке."""
     wav_path = audio_path_for(source, args)
@@ -209,8 +219,10 @@ def process_file(
     audio, unknown = synthesizer.synthesize(
         cleaned,
         progress=lambda done, total: print(
-            f"\r{source.name}: [{done}/{total}] предложений" if args.batch
-            else f"\r[{done}/{total}] предложений",
+            f"\rФайлы [{progress_bar(completed_files, file_total)}] · "
+            f"{source.name} [{progress_bar(done, total)}] предложений"
+            if args.batch
+            else f"\r{source.name} [{progress_bar(done, total)}] предложений",
             end="",
         ),
     )
@@ -286,15 +298,28 @@ def main(argv: list[str] | None = None) -> int:
         synthesizer = RussianSynthesizer(settings)
 
     failed = 0
+    completed = 0
     for index, path in enumerate(sources, 1):
         if args.batch:
-            print(f"\n[{index}/{len(sources)}] {path}")
+            print(
+                f"\nФайлы [{progress_bar(completed, len(sources))}] · "
+                f"[{index}/{len(sources)}] {path}"
+            )
         try:
-            code = process_file(path, args, synthesizer)
+            code = process_file(
+                path,
+                args,
+                synthesizer,
+                file_total=len(sources),
+                completed_files=completed,
+            )
         except Exception as exc:  # один битый файл не должен ронять всю пачку
-            print(f"Ошибка при обработке {path}: {exc}")
+            print(f"\nОшибка при обработке {path}: {exc}")
             code = 1
         failed += code != 0
+        completed += 1
+        if args.batch:
+            print(f"\rФайлы [{progress_bar(completed, len(sources))}]", end="\n")
 
     if args.batch:
         print(f"\nОбработано файлов: {len(sources) - failed} из {len(sources)}")

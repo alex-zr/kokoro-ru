@@ -12,6 +12,7 @@ from main import (
     input_path,
     narration_looks_like_path,
     parse_args,
+    progress_bar,
     resolve_sources,
 )
 
@@ -28,6 +29,17 @@ class InputPathTest(unittest.TestCase):
 
     def test_plain_path_is_kept(self):
         self.assertEqual(input_path(["input/example.md"]), Path("input/example.md"))
+
+
+class ProgressBarTest(unittest.TestCase):
+    def test_progress_bar_shows_fraction(self):
+        self.assertEqual(progress_bar(1, 4, width=8), "██░░░░░░ 1/4")
+
+    def test_progress_bar_caps_completed_value(self):
+        self.assertEqual(progress_bar(5, 4, width=4), "████ 5/4")
+
+    def test_progress_bar_handles_zero_total(self):
+        self.assertEqual(progress_bar(0, 0, width=4), "░░░░ 0/0")
 
 
 class CollectMarkdownFilesTest(unittest.TestCase):
